@@ -7,7 +7,7 @@ const BASE_URL =
 
 /**
  * =========================
- * ACCESS TOKEN (DEBUG)
+ * ACCESS TOKEN
  * =========================
  */
 const getAccessToken = async () => {
@@ -26,6 +26,7 @@ const getAccessToken = async () => {
         headers: {
           Authorization: `Basic ${credentials}`,
         },
+        timeout: 15000,
       }
     );
 
@@ -33,8 +34,19 @@ const getAccessToken = async () => {
 
     return response.data.access_token;
   } catch (err) {
-    console.error('❌ TOKEN ERROR FULL:', err.response?.data || err.message);
-    throw err;
+    console.log('❌ ===== ACCESS TOKEN ERROR =====');
+
+    if (err.response) {
+      console.log('STATUS:', err.response.status);
+      console.log('DATA:', err.response.data);
+    } else if (err.request) {
+      console.log('NO RESPONSE RECEIVED FROM SAFARICOM');
+      console.log(err.request);
+    } else {
+      console.log('ERROR MESSAGE:', err.message);
+    }
+
+    throw new Error('FAILED TO GET MPESA ACCESS TOKEN');
   }
 };
 
@@ -65,16 +77,8 @@ const getTimestamp = () => {
  * =========================
  */
 const generatePassword = (timestamp) => {
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const passkey = process.env.MPESA_PASSKEY;
-
-  if (!shortcode || !passkey) {
-    console.error('❌ Missing shortcode or passkey');
-    throw new Error('Missing M-Pesa credentials');
-  }
-
   const password = Buffer.from(
-    `${shortcode}${passkey}${timestamp}`
+    `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
   ).toString('base64');
 
   console.log('🔑 Password generated');
@@ -84,12 +88,12 @@ const generatePassword = (timestamp) => {
 
 /**
  * =========================
- * STK PUSH (FULL DEBUG)
+ * STK PUSH
  * =========================
  */
 const stkPush = async ({ phone, amount, orderId, description }) => {
   try {
-    console.log('📩 ===== STK PUSH START =====');
+    console.log('\n📩 ===== STK PUSH START =====');
     console.log('📱 Phone:', phone);
     console.log('💰 Amount:', amount);
     console.log('🧾 Order ID:', orderId);
@@ -127,25 +131,48 @@ const stkPush = async ({ phone, amount, orderId, description }) => {
       {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
+        timeout: 20000,
       }
     );
 
     console.log('📲 ===== STK RESPONSE =====');
     console.log(response.data);
 
-    if (response.data.ResponseCode === '0') {
-      console.log('✅ STK PUSH SUCCESS');
-    } else {
-      console.log('⚠️ STK PUSH FAILED RESPONSE');
+    if (!response.data) {
+      throw new Error('EMPTY RESPONSE FROM SAFARICOM');
     }
+
+    if (response.data.ResponseCode !== '0') {
+      console.log('❌ STK PUSH FAILED RESPONSE');
+      console.log(response.data);
+
+      throw new Error(
+        response.data.ResponseDescription || 'STK PUSH FAILED'
+      );
+    }
+
+    console.log('✅ STK PUSH SUCCESS');
 
     return response.data;
   } catch (err) {
-    console.error('❌ STK ERROR FULL:', err.response?.data || err.message);
+    console.log('\n❌ ===== MPESA STK ERROR =====');
+
+    if (err.response) {
+      console.log('STATUS:', err.response.status);
+      console.log('HEADERS:', err.response.headers);
+      console.log('DATA:', err.response.data);
+    } else if (err.request) {
+      console.log('NO RESPONSE FROM MPESA API');
+      console.log(err.request);
+    } else {
+      console.log('ERROR MESSAGE:', err.message);
+    }
+
     throw err;
   }
 };
 
-module.exports = { stkPush };
+module.exports = {
+  stkPush,
+};
