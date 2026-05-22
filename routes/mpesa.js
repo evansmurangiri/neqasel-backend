@@ -22,7 +22,7 @@ const PRODUCTS = {
 
 /**
  * ================================
- * STK PUSH INITIATION
+ * STK PUSH INITIATION (FIXED SAFE)
  * ================================
  */
 router.post('/pay', protect, async (req, res) => {
@@ -36,6 +36,18 @@ router.post('/pay', protect, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid product.',
+      });
+    }
+
+    /**
+     * 🔥 SAFE AUTH CHECK (PREVENTS 500 ERROR)
+     */
+    if (!req.user || !req.user._id) {
+      console.log('❌ AUTH FAILED: req.user missing');
+
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized. Please login again.',
       });
     }
 
@@ -59,7 +71,9 @@ router.post('/pay', protect, async (req, res) => {
 
     console.log('📱 Formatted phone:', formattedPhone);
 
-    // CREATE ORDER
+    /**
+     * CREATE ORDER
+     */
     const order = await Order.create({
       user: req.user._id,
       productKey,
@@ -71,7 +85,9 @@ router.post('/pay', protect, async (req, res) => {
 
     console.log('🧾 Order created:', order._id.toString());
 
-    // STK PUSH
+    /**
+     * STK PUSH
+     */
     const stkResponse = await stkPush({
       phone: formattedPhone,
       amount: product.amount,
@@ -100,24 +116,26 @@ router.post('/pay', protect, async (req, res) => {
 
     console.log('✅ STK SENT SUCCESSFULLY');
 
-    res.json({
+    return res.json({
       success: true,
       checkoutRequestId: order.checkoutRequestId,
       orderId: order._id,
     });
-  } catch (err) {
-    console.error('❌ STK PUSH ERROR:', err.response?.data || err.message);
 
-    res.status(500).json({
+  } catch (err) {
+    console.error('❌ STK PUSH ERROR:', err);
+
+    return res.status(500).json({
       success: false,
       message: 'Payment initiation failed.',
+      error: err.message,
     });
   }
 });
 
 /**
  * ================================
- * CALLBACK (ONLY ONE - FIXED)
+ * CALLBACK (SAFE - NO CRASH)
  * ================================
  */
 router.post('/callback', async (req, res) => {
@@ -168,6 +186,7 @@ router.post('/callback', async (req, res) => {
       });
 
       console.log('💰 PAYMENT COMPLETED');
+
     } else {
       order.status = 'failed';
       await order.save();
@@ -175,23 +194,25 @@ router.post('/callback', async (req, res) => {
       console.log('❌ PAYMENT FAILED');
     }
 
-    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+
   } catch (err) {
-    console.error('❌ CALLBACK ERROR:', err.message);
-    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    console.error('❌ CALLBACK ERROR:', err);
+
+    return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   }
 });
 
 /**
  * ================================
- * STATUS CHECK
+ * STATUS CHECK (SAFE)
  * ================================
  */
 router.get('/status/:checkoutRequestId', protect, async (req, res) => {
   try {
     const order = await Order.findOne({
       checkoutRequestId: req.params.checkoutRequestId,
-      user: req.user._id,
+      user: req.user?._id,
     });
 
     if (!order) {
@@ -201,14 +222,15 @@ router.get('/status/:checkoutRequestId', protect, async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       status: order.status,
       downloadToken:
         order.status === 'completed' ? order.downloadToken : null,
     });
+
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
