@@ -5,41 +5,77 @@ const connectDB = require('./config/db');
 
 const app = express();
 
-// Connect DB safely
+// ========================
+// DB CONNECTION
+// ========================
 connectDB().catch((err) => {
   console.error('❌ DB connection failed:', err);
   process.exit(1);
 });
 
-// Middleware
+// ========================
+// BODY PARSING
+// ========================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS setup for production + local
+// ========================
+// CORS (LOCAL + PRODUCTION FIX)
+// ========================
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://neqasel-frontend.vercel.app',
+  'https://neqasel-frontend-225wj5j36-evansmurangiris-projects.vercel.app'
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: function (origin, callback) {
+      // allow server-to-server or mobile apps (no origin)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log('❌ Blocked CORS origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
 
-// Routes
+// ========================
+// ROUTES
+// ========================
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/mpesa', require('./routes/mpesa'));
 app.use('/api/download', require('./routes/download'));
 app.use('/api/bookings', require('./routes/bookings'));
 
-// Health check
+// ========================
+// HEALTH CHECK
+// ========================
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'Neqasel API running ✅' });
+  res.json({
+    success: true,
+    message: 'Neqasel API running ✅',
+  });
 });
 
-// 404 handler
+// ========================
+// 404 HANDLER
+// ========================
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found.' });
+  res.status(404).json({
+    success: false,
+    message: 'Route not found.',
+  });
 });
 
-// PORT (Render uses process.env.PORT)
+// ========================
+// START SERVER
+// ========================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
