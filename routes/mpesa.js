@@ -81,19 +81,16 @@ router.post('/pay', protect, async (req, res) => {
 
     console.log('📲 STK RESPONSE:', stkResponse);
 
-    // IMPORTANT FIX: Safaricom uses ResponseCode string "0"
     if (!stkResponse || stkResponse.ResponseCode !== '0') {
       order.status = 'failed';
       await order.save();
 
       return res.status(400).json({
         success: false,
-        message:
-          stkResponse?.ResponseDescription || 'STK Push failed.',
+        message: stkResponse?.ResponseDescription || 'STK Push failed.',
       });
     }
 
-    // FIX: SAFARICOM FIELD NAME CONSISTENCY
     order.checkoutRequestId =
       stkResponse.CheckoutRequestID || stkResponse.CheckoutRequestId;
 
@@ -105,12 +102,11 @@ router.post('/pay', protect, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'STK Push sent successfully.',
       checkoutRequestId: order.checkoutRequestId,
       orderId: order._id,
     });
   } catch (err) {
-    console.error('❌ STK PUSH ERROR (ROUTE):', err.response?.data || err.message);
+    console.error('❌ STK PUSH ERROR:', err.response?.data || err.message);
 
     res.status(500).json({
       success: false,
@@ -121,15 +117,14 @@ router.post('/pay', protect, async (req, res) => {
 
 /**
  * ================================
- * CALLBACK (IMPORTANT)
+ * CALLBACK (ONLY ONE - FIXED)
  * ================================
  */
 router.post('/callback', async (req, res) => {
   try {
     console.log('📥 CALLBACK RECEIVED:', JSON.stringify(req.body, null, 2));
 
-    const { Body } = req.body;
-    const stkCallback = Body?.stkCallback;
+    const stkCallback = req.body?.Body?.stkCallback;
 
     if (!stkCallback) {
       return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
@@ -211,7 +206,6 @@ router.get('/status/:checkoutRequestId', protect, async (req, res) => {
       status: order.status,
       downloadToken:
         order.status === 'completed' ? order.downloadToken : null,
-      orderId: order._id,
     });
   } catch (err) {
     res.status(500).json({
