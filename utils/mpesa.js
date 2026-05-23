@@ -18,8 +18,6 @@ const getAccessToken = async () => {
       `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
     ).toString('base64');
 
-    console.log('🧾 Encoded credentials ready');
-
     const response = await axios.get(
       `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
       {
@@ -34,16 +32,13 @@ const getAccessToken = async () => {
 
     return response.data.access_token;
   } catch (err) {
-    console.log('❌ ===== ACCESS TOKEN ERROR =====');
+    console.log('❌ ACCESS TOKEN ERROR');
 
     if (err.response) {
       console.log('STATUS:', err.response.status);
       console.log('DATA:', err.response.data);
-    } else if (err.request) {
-      console.log('NO RESPONSE RECEIVED FROM SAFARICOM');
-      console.log(err.request);
     } else {
-      console.log('ERROR MESSAGE:', err.message);
+      console.log('ERROR:', err.message);
     }
 
     throw new Error('FAILED TO GET MPESA ACCESS TOKEN');
@@ -66,8 +61,6 @@ const getTimestamp = () => {
     String(d.getMinutes()).padStart(2, '0') +
     String(d.getSeconds()).padStart(2, '0');
 
-  console.log('⏱ Timestamp:', timestamp);
-
   return timestamp;
 };
 
@@ -77,35 +70,33 @@ const getTimestamp = () => {
  * =========================
  */
 const generatePassword = (timestamp) => {
-  const password = Buffer.from(
+  return Buffer.from(
     `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
   ).toString('base64');
-
-  console.log('🔑 Password generated');
-
-  return password;
 };
 
 /**
  * =========================
- * STK PUSH
+ * STK PUSH (FIXED)
  * =========================
  */
 const stkPush = async ({ phone, amount, orderId, description }) => {
   try {
     console.log('\n📩 ===== STK PUSH START =====');
-    console.log('📱 Phone:', phone);
-    console.log('💰 Amount:', amount);
-    console.log('🧾 Order ID:', orderId);
 
     const token = await getAccessToken();
     const timestamp = getTimestamp();
     const password = generatePassword(timestamp);
 
-    const callbackUrl =
-      process.env.MPESA_ENV === 'production'
-        ? process.env.MPESA_CALLBACK_URL
-        : process.env.MPESA_CALLBACK_URL_LOCAL;
+    /**
+     * ✅ FIXED: ALWAYS use production callback from env
+     * (NO local split — this was breaking your Render deployment)
+     */
+    const callbackUrl = process.env.MPESA_CALLBACK_URL;
+
+    if (!callbackUrl) {
+      throw new Error('MPESA_CALLBACK_URL is not set in environment');
+    }
 
     console.log('🌐 Callback URL:', callbackUrl);
 
@@ -123,7 +114,7 @@ const stkPush = async ({ phone, amount, orderId, description }) => {
       TransactionDesc: description || 'Payment',
     };
 
-    console.log('📦 STK Payload:', JSON.stringify(payload, null, 2));
+    console.log('📦 STK Payload Ready');
 
     const response = await axios.post(
       `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
@@ -136,19 +127,11 @@ const stkPush = async ({ phone, amount, orderId, description }) => {
       }
     );
 
-    console.log('📲 ===== STK RESPONSE =====');
-    console.log(response.data);
+    console.log('📲 STK RESPONSE:', response.data);
 
-    if (!response.data) {
-      throw new Error('EMPTY RESPONSE FROM SAFARICOM');
-    }
-
-    if (response.data.ResponseCode !== '0') {
-      console.log('❌ STK PUSH FAILED RESPONSE');
-      console.log(response.data);
-
+    if (!response.data || response.data.ResponseCode !== '0') {
       throw new Error(
-        response.data.ResponseDescription || 'STK PUSH FAILED'
+        response.data?.ResponseDescription || 'STK PUSH FAILED'
       );
     }
 
@@ -156,17 +139,13 @@ const stkPush = async ({ phone, amount, orderId, description }) => {
 
     return response.data;
   } catch (err) {
-    console.log('\n❌ ===== MPESA STK ERROR =====');
+    console.log('\n❌ MPESA STK ERROR');
 
     if (err.response) {
       console.log('STATUS:', err.response.status);
-      console.log('HEADERS:', err.response.headers);
       console.log('DATA:', err.response.data);
-    } else if (err.request) {
-      console.log('NO RESPONSE FROM MPESA API');
-      console.log(err.request);
     } else {
-      console.log('ERROR MESSAGE:', err.message);
+      console.log('ERROR:', err.message);
     }
 
     throw err;
